@@ -30,7 +30,7 @@ def home():
 <style>body{font-family:system-ui,Arial;margin:0;background:#f7fafc;color:#111}header{background:#16a34a;color:#fff;padding:1.5rem;text-align:center}main{max-width:960px;margin:2rem auto;background:#fff;padding:1.6rem;border-radius:12px;box-shadow:0 6px 24px rgba(2,6,23,0.06)}a.btn{display:inline-block;background:#16a34a;color:#fff;padding:.6rem 1rem;border-radius:8px;text-decoration:none;font-weight:600}</style>
 </head>
 <body>
-<header><h1>🌍 GeoGuessr Tracker</h1></header>
+<header><h1>🌍 GeoGuessr Tracker   AAAAA</h1></header>
 <main>
 <h2>Servidor ativo ✅</h2>
 <p>Endpoint <code>/upload</code> pronto para receber replays via Tampermonkey (CORS habilitado).</p>
