@@ -1,7 +1,11 @@
 from flask import Flask, request, jsonify
-import os, json, datetime
+from flask_cors import CORS
+import json, os
 
 app = Flask(__name__)
+CORS(app)
+
+DATA_FILE = "dados_ranked.json"
 
 # Cria uma pasta para armazenar os dados, se ainda não existir
 os.makedirs("dados", exist_ok=True)
