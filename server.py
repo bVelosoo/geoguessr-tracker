@@ -1,103 +1,97 @@
-from flask import Flask, request, jsonify
+# server.py — versão reforçada CORS + OPTIONS + porta do Render
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
-import json
-import os
+import json, os, sys, traceback
 
 app = Flask(__name__)
-CORS(app)  # permite chamadas externas (ex: do Tampermonkey)
+
+# Configurações CORS explícitas
+CORS(app,
+     resources={r"/*": {"origins": "*"}},
+     supports_credentials=False,
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+     expose_headers=["Content-Type"],
+     methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"]
+)
 
 DATA_FILE = "dados_ranked.json"
 
-# ==============================
-# Página inicial (painel bonito)
-# ==============================
-@app.route("/")
+def log(*args, **kwargs):
+    print(*args, **kwargs, flush=True)
+
+# rota principal (html leve)
+@app.route("/", methods=["GET"])
 def home():
     return """
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>GeoGuessr Tracker 🌍</title>
-<style>
-  body {font-family: system-ui, Arial, sans-serif; background:#f9fafb; color:#111; margin:0; padding:0;}
-  header {background:#16a34a; color:white; text-align:center; padding:1.5rem 1rem; box-shadow:0 2px 6px rgba(0,0,0,0.2);}
-  main {max-width:900px; margin:2rem auto; background:white; padding:2rem; border-radius:1rem; 
-        box-shadow:0 4px 20px rgba(0,0,0,0.08);}
-  h1 {margin:0 0 1rem;}
-  p {line-height:1.6;}
-  .button {display:inline-block; background:#16a34a; color:white; padding:.7rem 1.2rem; 
-           border-radius:6px; text-decoration:none; font-weight:bold;}
-  .button:hover {background:#15803d;}
-  footer {text-align:center; color:#666; margin-top:3rem; padding:1rem;}
-</style>
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GeoGuessr Tracker</title>
+<style>body{font-family:system-ui,Arial;margin:0;background:#f7fafc;color:#111}header{background:#16a34a;color:#fff;padding:1.5rem;text-align:center}main{max-width:960px;margin:2rem auto;background:#fff;padding:1.6rem;border-radius:12px;box-shadow:0 6px 24px rgba(2,6,23,0.06)}a.btn{display:inline-block;background:#16a34a;color:#fff;padding:.6rem 1rem;border-radius:8px;text-decoration:none;font-weight:600}</style>
 </head>
 <body>
-  <header>
-    <h1>🌍 GeoGuessr Tracker</h1>
-    <p>Monitor de partidas Ranked e Unranked</p>
-  </header>
-  <main>
-    <h2>Servidor ativo ✅</h2>
-    <p>O rastreador está pronto para receber replays automaticamente via extensão Tampermonkey.</p>
-    <p>Assim que você jogar e o script capturar as partidas, elas aparecerão aqui:</p>
-    <a href="/dados" class="button">Ver dados armazenados</a>
-  </main>
-  <footer>
-    Feito com ❤️ em Flask – 2025
-  </footer>
+<header><h1>🌍 GeoGuessr Tracker</h1></header>
+<main>
+<h2>Servidor ativo ✅</h2>
+<p>Endpoint <code>/upload</code> pronto para receber replays via Tampermonkey (CORS habilitado).</p>
+<p><a class="btn" href="/dados">Ver dados armazenados</a></p>
+</main>
 </body>
 </html>
-    """
+"""
 
+# OPTIONS handler genérico (garante resposta à preflight)
+@app.route("/upload", methods=["OPTIONS"])
+def upload_options():
+    resp = make_response("")
+    # cabeçalhos CORS já aplicados por flask_cors, mas garantimos explicitamente:
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return resp
 
-# ==============================
-# Endpoint para receber os dados
-# ==============================
+# endpoint principal
 @app.route("/upload", methods=["POST"])
 def upload():
     try:
         data = request.get_json(force=True)
         if not data:
-            return jsonify({"status": "erro", "msg": "JSON vazio"}), 400
+            return jsonify({"status":"erro","msg":"JSON vazio"}), 400
 
-        # cria o arquivo se não existir
+        # cria arquivo se não existir
         if not os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "w", encoding="utf-8") as f:
+            with open(DATA_FILE, "w", encoding="utf-8") as _:
                 pass
 
-        # salva cada replay em uma linha separada (para fácil leitura)
+        # salva cada objeto em uma linha (JSON Lines)
         with open(DATA_FILE, "a", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
             f.write("\n")
 
-        print("✅ Replay salvo:", data.get("gameId", "sem ID"))
-        return jsonify({"status": "ok", "msg": "Replay salvo com sucesso!"})
+        log("✅ Replay salvo:", data.get("gameId","(sem id)"))
+        return jsonify({"status":"ok","msg":"Replay salvo"}), 201
 
     except Exception as e:
-        print("❌ Erro ao salvar replay:", e)
-        return jsonify({"status": "erro", "msg": str(e)}), 500
+        tb = traceback.format_exc()
+        log("❌ Erro ao processar upload:", str(e))
+        log(tb)
+        return jsonify({"status":"erro","msg":str(e)}), 500
 
-
-# ==============================
-# Endpoint para listar os dados
-# ==============================
-@app.route("/dados")
+@app.route("/dados", methods=["GET"])
 def dados():
     try:
         if not os.path.exists(DATA_FILE):
             return jsonify([])
+
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-            data = [json.loads(l) for l in lines if l.strip()]
-        return jsonify(data)
+            lines = [l.strip() for l in f.readlines() if l.strip()]
+            parsed = [json.loads(l) for l in lines]
+        return jsonify(parsed)
     except Exception as e:
-        return jsonify({"status": "erro", "msg": str(e)}), 500
+        log("Erro ao ler dados:", e)
+        return jsonify({"status":"erro","msg":str(e)}), 500
 
-
-# ==============================
-# Inicialização
-# ==============================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    # usa porta do Render (variável de ambiente PORT) ou 5000 local
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
